@@ -1,0 +1,324 @@
+```{r}
+library(arm)
+library(Matching)
+library(dplyr)
+library(tree)
+library(randomForest)
+```
+
+```{r}
+data(lalonde)
+# randomlyget 80% of data points
+index = floor(0.8 * nrow(lalonde))
+set.seed(123)
+# create training set and test set
+train = sample(seq_len(nrow(lalonde)), size = index)
+lalonde.train <- lalonde[train,]
+lalonde.test <- lalonde[-train,]
+
+head(lalonde.train)
+```
+```{r}
+### PREPROCESS DATA ###
+#######################
+
+lalonde.degree <- lalonde[lalonde$nodegr == 1, ]      # 348 obs
+lalonde.nodegree <- lalonde[lalonde$nodegr == 0, ]    # 97 obs
+
+lalonde.degree.trainee <- lalonde.degree[lalonde.degree$treat == 1, ]   # 131 obs
+lalonde.degree.control <- lalonde.degree[lalonde.degree$treat == 0, ]   # 217 obs
+
+lalonde.nodegree.trainee <- lalonde.nodegree[lalonde.nodegree$treat == 1, ]   # 54 obs
+lalonde.nodegree.control <- lalonde.nodegree[lalonde.nodegree$treat == 0, ]   # 43 obs
+
+plot(density(lalonde.degree$re78), col = "red")
+lines(density(lalonde.nodegree$re78), col = "blue")
+```
+
+```{r}
+### MULTIVARIATE REGRESSION ###
+######  NO INTERACTION ########
+###############################
+
+no_interaction <- lm(re78 ~ age + black + re75 + u75 + nodegr + treat + hisp + married + re74 + u74, data = lalonde.train)
+
+summary(no_interaction)
+```
+
+```{r}
+residuals_regression <- lalonde.test$re78 - predict(no_interaction, newdata = lalonde.test)
+
+MSE_regression <- mean(residuals_regression^2)
+
+cat("\n MSE regression w/out interaction terms =", MSE_regression, "\n\n")
+```
+
+```{r}
+
+### SUBGROUP: DEGREE ###
+### nodegr = 0 #########
+########################
+
+storage.degree.trainee <- rep(0, 1000)
+storage.degree.control <- rep(0, 1000)
+
+sim.no_interaction <- sim(no_interaction, 1000)
+
+for (i in 1:1000) {
+  storage.degree.trainee[i] <- sim.no_interaction@coef[i,1] + sim.no_interaction@coef[i,2]*mean(lalonde$age) + sim.no_interaction@coef[i,3] * 1 + sim.no_interaction@coef[i,4]*0 + sim.no_interaction@coef[i,5]*1 + sim.no_interaction@coef[i,6]*0 + sim.no_interaction@coef[i,7]*1 + sim.no_interaction@coef[i, 8]*0 + sim.no_interaction@coef[i, 9]*0 + sim.no_interaction@coef[i, 10]*0 + sim.no_interaction@coef[i, 11]*0 + rnorm(1, mean = 0, sd = sim.no_interaction@sigma[i]) # simulate error/noise
+}
+# the only difference is in treat variable
+for (i in 1:1000) {
+  storage.degree.control[i] <- sim.no_interaction@coef[i,1] + sim.no_interaction@coef[i,2]*mean(lalonde$age) + sim.no_interaction@coef[i,3] * 1 + sim.no_interaction@coef[i,4]*0 + sim.no_interaction@coef[i,5]*1 + sim.no_interaction@coef[i,6]*0 + sim.no_interaction@coef[i,7]*0 + sim.no_interaction@coef[i, 8]*0 + sim.no_interaction@coef[i, 9]*0 + sim.no_interaction@coef[i, 10]*0 + sim.no_interaction@coef[i, 11]*0 + rnorm(1, mean = 0, sd = sim.no_interaction@sigma[i]) # simulate error/noise
+}
+
+
+quantile(storage.degree.trainee, probs = c(0.025, 0.975))
+quantile(storage.degree.control, probs = c(0.025, 0.975))
+
+# plot(density(storage.vector.trainee), col = "red", xlim = c(-10000, 20000), main = "Real Earnings in 1978 for Degree Holders WITH and WITHOUT training", xlab = "Real Earnings", ylab = "Density")
+# lines(density(storage.vector.control), col = "blue")
+# legend(x = "topright", legend = c("Trainee", "Non-Trainee"), fill = c("red", "blue"))
+```
+
+
+```{r}
+### SUBGROUP: NO DEGREE ###
+### nodegr = 1 #########
+########################
+
+storage.nodegree.trainee <- rep(0, 1000)
+storage.nodegree.control <- rep(0, 1000)
+
+sim.no_interaction <- sim(no_interaction, 1000)
+
+for (i in 1:1000) {
+  storage.nodegree.trainee[i] <- sim.no_interaction@coef[i,1] + sim.no_interaction@coef[i,2]*mean(lalonde$age) + sim.no_interaction@coef[i,3] * 1 + sim.no_interaction@coef[i,4]*0 + sim.no_interaction@coef[i,5]*1 + sim.no_interaction@coef[i,6]*1 + sim.no_interaction@coef[i,7]*1 + sim.no_interaction@coef[i, 8]*0 + sim.no_interaction@coef[i, 9]*0 + sim.no_interaction@coef[i, 10]*0 + sim.no_interaction@coef[i, 11]*0 + rnorm(1, mean = 0, sd = sim.no_interaction@sigma[i]) # simulate error/noise
+}
+# the only difference is in treat variable
+for (i in 1:1000) {
+  storage.nodegree.control[i] <- sim.no_interaction@coef[i,1] + sim.no_interaction@coef[i,2]*mean(lalonde$age) + sim.no_interaction@coef[i,3] * 1 + sim.no_interaction@coef[i,4]*0 + sim.no_interaction@coef[i,5]*1 + sim.no_interaction@coef[i,6]*1 + sim.no_interaction@coef[i,7]*0 + sim.no_interaction@coef[i, 8]*0 + sim.no_interaction@coef[i, 9]*0 + sim.no_interaction@coef[i, 10]*0 + sim.no_interaction@coef[i, 11]*0 + rnorm(1, mean = 0, sd = sim.no_interaction@sigma[i]) # simulate error/noise
+}
+
+
+quantile(storage.nodegree.trainee, probs = c(0.025, 0.975))
+quantile(storage.nodegree.control, probs = c(0.025, 0.975))
+
+# plot(density(storage.vector.trainee), col = "red", xlim = c(-8000, 20000), main = "Real Earnings in 1978 for No-Degree Holders WITH and WITHOUT training", xlab = "Real Earnings", ylab = "Density")
+# lines(density(storage.vector.control), col = "blue")
+# legend(x = "topright", legend = c("Trainee", "Non-Trainee"), fill = c("red", "blue"))
+```
+
+```{r}
+### MULTIVARIATE REGRESSION ###
+##### INTERACTION TERMS #######
+###############################
+interaction <- lm(re78 ~ age + black + re75 + u75 + nodegr + treat + I(nodegr * treat) + hisp + married + re74 + u74, data = lalonde.train)
+
+summary(interaction)
+```
+```{r}
+residuals_regression <- lalonde.test$re78 - predict(interaction, newdata = lalonde.test)
+
+MSE_regression <- mean(residuals_regression^2)
+
+cat("\n MSE regression w/ interaction terms =", MSE_regression, "\n\n")
+```
+
+
+
+```{r}
+### SUBGROUP: DEGREE ###
+### nodegr = 0 ########
+########################
+
+storage.vector.trainee <- rep(0, 1000)
+storage.vector.control <- rep(0, 1000)
+
+sim.interaction <- sim(interaction, 1000)
+
+for (i in 1:1000) {
+  storage.vector.trainee[i] <- sim.interaction@coef[i,1] + sim.interaction@coef[i,2]*mean(lalonde$age) + sim.interaction@coef[i,3] * 1 + sim.interaction@coef[i,4]*0 + sim.interaction@coef[i,5]*1 + sim.interaction@coef[i,6]*0 + sim.interaction@coef[i,7]*1 + sim.interaction@coef[i,8]*0*1 + sim.interaction@coef[i,9]*0 + sim.interaction@coef[i,10]*0 + sim.interaction@coef[i,11]*0 + sim.interaction@coef[i,12]*1 + rnorm(1, mean = 0, sd = sim.interaction@sigma[i]) # simulate error/noise
+}
+# the only difference is in treat variable
+for (i in 1:1000) {
+  storage.vector.control[i] <- sim.no_interaction@coef[i,1] + sim.interaction@coef[i,2]*mean(lalonde$age) + sim.interaction@coef[i,3] * 1 + sim.interaction@coef[i,4]*0 + sim.no_interaction@coef[i,5]*1 + sim.interaction@coef[i,6]*0 + sim.interaction@coef[i,7]*0 + sim.interaction@coef[i,8]*0*0 + sim.interaction@coef[i,9]*0 + sim.interaction@coef[i,10]*0 + sim.interaction@coef[i,11]*0 + sim.interaction@coef[i,12]*1 + rnorm(1, mean = 0, sd = sim.interaction@sigma[i]) # simulate error/noise
+}
+
+
+quantile(storage.vector.trainee, probs = c(0.025, 0.975))
+quantile(storage.vector.control, probs = c(0.025, 0.975))
+
+plot(density(storage.vector.trainee), col = "red", xlim = c(-8000, 20000), main = "Real Earnings in 1978 for Degree Holders WITH and WITHOUT training", xlab = "Real Earnings", ylab = "Density")
+lines(density(storage.vector.control), col = "blue")
+legend(x = "topright", legend = c("Trainee", "Non-Trainee"), fill = c("red", "blue"))
+```
+
+```{r}
+### SUBGROUP: NO DEGREE ###
+### nodegr = 1 #########
+########################
+
+storage.vector.trainee <- rep(0, 1000)
+storage.vector.control <- rep(0, 1000)
+
+sim.interaction <- sim(interaction, 1000)
+
+for (i in 1:1000) {
+  storage.vector.trainee[i] <- sim.interaction@coef[i,1] + sim.interaction@coef[i,2]*mean(lalonde$age) + sim.interaction@coef[i,3] * 1 + sim.interaction@coef[i,4]*0 + sim.interaction@coef[i,5]*1 + sim.interaction@coef[i,6]*1 + sim.interaction@coef[i,7]*1 + sim.interaction@coef[i,8]*1*1 + sim.interaction@coef[i,9]*0 + sim.interaction@coef[i,10]*0 + sim.interaction@coef[i,11]*0 + sim.interaction@coef[i,12]*1 + rnorm(1, mean = 0, sd = sim.interaction@sigma[i]) # simulate error/noise
+}
+# the only difference is in treat variable
+for (i in 1:1000) {
+  storage.vector.control[i] <- sim.interaction@coef[i,1] + sim.interaction@coef[i,2]*mean(lalonde$age) + sim.interaction@coef[i,3] * 1 + sim.interaction@coef[i,4]*0 + sim.interaction@coef[i,5]*1 + sim.interaction@coef[i,6]*1 + sim.interaction@coef[i,7]*0 + sim.interaction@coef[i,8]*1*0 + sim.interaction@coef[i,9]*0 + sim.interaction@coef[i,10]*0 + sim.interaction@coef[i,11]*0 + sim.interaction@coef[i,12]*1 + rnorm(1, mean = 0, sd = sim.interaction@sigma[i]) # simulate error/noise
+}
+
+
+quantile(storage.vector.trainee, probs = c(0.025, 0.975))
+quantile(storage.vector.control, probs = c(0.025, 0.975))
+
+plot(density(storage.vector.trainee), col = "red", xlim = c(-10000, 20000), main = "Real Earnings in 1978 for No-Degree Holders WITH and WITHOUT training", xlab = "Real Earnings", ylab = "Density")
+lines(density(storage.vector.control), col = "blue")
+legend(x = "topright", legend = c("Trainee", "Non-Trainee"), fill = c("red", "blue"))
+```
+```{r}
+
+## With smaller MSE test set error, I will choose no-interaction regression model's predicted values for visualization
+
+
+plot(density(storage.degree.trainee), col = "red", xlim = c(-12000, 20000), main = " No Interaction Regression's Predicted Real Earnings in 1978 for 4 groups", xlab = "Real Earnings", ylab = "Density")
+lines(density(storage.degree.control), col = "blue")
+lines(density(storage.nodegree.trainee), col = "orange")
+lines(density(storage.nodegree.control), col = "gray")
+legend(x = "topleft", legend = c("Degree Trainee", "Degree Non-Trainee", "No-Degree Trainee", "No-Degree Non-Trainee"), fill = c("red", "blue", "orange", "gray"), cex = 0.75)
+```
+
+```{r}
+
+ ##### CART ######
+## WITHOUT PRUNING ##
+tree.re78 <- tree(re78 ~ age + black + re75 + u75 + nodegr + treat + hisp + married + re74 + u74, data = lalonde.train)
+
+summary(tree.re78)
+```
+
+```{r}
+plot(tree.re78)
+text(tree.re78, pretty=0)
+```
+```{r}
+test.pred <- predict(tree.re78, lalonde.test, type = "vector")
+
+residuals_regression <- lalonde.test$re78 - test.pred
+
+MSE_regression <- mean(residuals_regression^2)
+
+cat("\n MSE CART w/out tree pruning =", MSE_regression, "\n\n")
+```
+```{r}
+### CROSS VALIDATION ###
+cv.re78 <- cv.tree(tree.re78, FUN = prune.tree)
+print(cv.re78)
+
+```
+```{r}
+plot(cv.re78, type = "b")
+title("Relationship between Tree Size and Error", line = -20)
+```
+
+
+```{r}
+  #### CART ####
+## WITH PRUNING ##
+prune.re78 <- prune.tree(tree.re78, best = 6)
+plot(prune.re78)
+text(prune.re78, pretty=0)
+```
+```{r}
+test.pred <- predict(prune.re78, lalonde.test, type = "vector")
+
+
+residuals_regression <- lalonde.test$re78 - test.pred
+
+MSE_regression <- mean(residuals_regression^2)
+
+cat("\n MSE CART with tree pruning =", MSE_regression, "\n\n")
+```
+```{r}
+# because education is not a characteristic of a typical trainee
+# and re78 is already a response variable
+# i just put them here to form a dataframe matching the original, yet dont use them
+people <- data.frame(
+  c(mean(lalonde$age), mean(lalonde$age), mean(lalonde$age), mean(lalonde$age)),
+  c(mean(lalonde$educ), mean(lalonde$educ), mean(lalonde$educ), mean(lalonde$educ)),
+  c(1, 1, 1, 1),
+  c(0, 0, 0, 0),
+  c(0, 0, 0, 0),
+  c(0, 0, 1, 1), # with degree, with degree, no degree, no degree
+  c(0, 0, 0, 0),
+  c(0, 0, 0, 0),
+  c(mean(lalonde$re78), mean(lalonde$re78), mean(lalonde$re78), mean(lalonde$re78)),
+  c(1, 1, 1, 1),
+  c(1, 1, 1, 1),
+  c(1, 0, 1, 0)) # with training, no training, with training, no training
+
+names(people) <- names(lalonde)
+
+pred <- predict(prune.re78, newdata = people, type = "vector")
+pred
+
+```
+
+```{r}
+# choose the optimal mtry based on OOB error
+# for x, i drop the column of re78 (response variable)
+# for y, i include only re78
+# plotting OOB error and mtry
+tuneRF(lalonde.train[, -9], lalonde.train[, 9], plot = TRUE, doBest = TRUE)
+```
+
+
+```{r}
+lalonde.rf <- randomForest(re78 ~ ., data = lalonde.train, mtry = 2, importance = TRUE)
+lalonde.rf
+```
+```{r}
+varImpPlot(lalonde.rf)
+```
+```{r}
+test.pred.rf <- predict(lalonde.rf, newdata = lalonde.test)
+
+residuals_regression_rf <- lalonde.test$re78 - test.pred.rf
+
+MSE_regression_rf <- mean(residuals_regression_rf^2)
+
+cat("\n MSE random forest with optimal mtry  =", MSE_regression_rf, "\n\n")
+```
+
+```{r}
+pred.rf <- predict(lalonde.rf, newdata = people)
+
+pred.rf
+
+```
+
+```{r}
+storage.degree.trainee <- rep(0, 100)
+storage.degree.nontrainee <- rep(0, 100)
+storage.nodegree.trainee <- rep(0, 100)
+storage.nodegree.nontrainee <- rep(0, 100)
+for (i in 1:100) {
+  lalonde.rf <- randomForest(re78 ~ ., data = lalonde.train, mtry = 2, importance = TRUE)
+  pred.rf <- predict(lalonde.rf, newdata = people)
+  storage.degree.trainee[i] <- pred.rf[1]
+  storage.degree.nontrainee[i] <- pred.rf[2]
+  storage.nodegree.trainee[i] <- pred.rf[3]
+  storage.nodegree.nontrainee[i] <- pred.rf[4]
+}
+
+plot(density(storage.degree.trainee), col = "red", xlim = c(2500, 6000), ylim = c(0, 0.008), main = " Random Forest's Predicted Real Earnings in 1978 for 4 groups", xlab = "Real Earnings", ylab = "Density")
+lines(density(storage.degree.nontrainee), col = "blue")
+lines(density(storage.nodegree.trainee), col = "orange")
+lines(density(storage.nodegree.nontrainee), col = "gray")
+legend(x = "topright", legend = c("Degree Trainee", "Degree Non-Trainee", "No-Degree Trainee", "No-Degree Non-Trainee"), fill = c("red", "blue", "orange", "gray"))
+```
+
